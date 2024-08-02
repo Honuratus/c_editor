@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <curses.h>
 #include "Buffer.h"
-
+#include "Displayer.h"
 
 #define ctrl(x) ((x) & 0x1f)
 
@@ -78,9 +78,7 @@ int main(int argc, char** argv){
     int row, col;
 
 
-    FILE* file = fopen(argv[1], "w");
 
-    TextBuffer* tb = initTextBuffer();
 
 
     // initialization
@@ -95,6 +93,13 @@ int main(int argc, char** argv){
     getmaxyx(stdscr, row, col);
     changeMode(argv[1]);
     move(0,0);
+    
+	TextBuffer* tb = initTextBuffer();
+	if (!getBufferContent(argv[1], tb) == 0){
+		displayLines(tb->content);	
+	}
+ 
+	FILE* file = fopen(argv[1], "w");
 
     // cordinates variables
     int x = 0,y = 0;
@@ -128,16 +133,18 @@ int main(int argc, char** argv){
                     x = x + 1;
                     move(y,x);
                 }
+				else{
+					printw("%d", ch);
+				}
 
                 break;
             case INSERT:
                 getyx(stdscr,y,x);
                 if(ch == BACKSPACE){
                     if(x > 0){
-                        deleteChar(tb, (y * getmaxx(stdscr)) + (x-1));
+                        deleteChar(tb, xyToIndex(x,y,tb->content));
                         move(y,x-1);
                         delch();
-                        
                     }
                     else if (y > 0){
                         y = y-1;
@@ -168,17 +175,24 @@ int main(int argc, char** argv){
                     move(y,x);
                 }
                 else if(ch == 10 || ch == '\r' || ch == KEY_ENTER || ch == '\n'){
-                    int pos = (y * getmaxx(stdscr)) + x;
-                    insertChar(tb, pos, '\n');
+					insertChar(tb, xyToIndex(x, y, tb->content), '\n');
                     y = y+1;
                     x = 0;
                     move(y,x);
                 }
                 else{
-                    int pos = (y * getmaxx(stdscr)) + x;
-                    insertChar(tb, pos, ch);
-                    addch(ch);
-                }
+                    insertChar(tb, xyToIndex(x,y,tb->content), ch);
+                    insch(ch);
+					x++;
+					if (x == getmaxx(stdscr)){
+						y++;
+						x = 0;
+					}
+					move(y,x);
+
+					mvprintw(row-1,0,"x: %d max:%d", x, getmaxx(stdscr));
+					move(y,x);
+				}
                 break;
             case COMMAND:
                 if(ch == ESCAPE){
@@ -225,13 +239,15 @@ int main(int argc, char** argv){
         
     }
 
+	addNlToBuffer(tb);
 
-
-    
-    fwrite(tb->content, tb->length, 1, file);
+    fwrite(tb->content, tb->length+1, 1, file);
 
     fclose(file);
+	
 
+	free(tb->content);
+	free(tb);
     refresh();
     endwin();  
     
